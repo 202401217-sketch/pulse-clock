@@ -1,0 +1,931 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pulse Clock</title>
+<meta name="theme-color" content="#05050b">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Pulse">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icons/favicon-32.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@200;300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --a1:#8b5cff; --a2:#22e0c0;
+    --bg:#05050b; --card:rgba(255,255,255,.055); --card2:rgba(255,255,255,.035);
+    --line:rgba(255,255,255,.1); --text:#f4f3ff; --muted:rgba(244,243,255,.56);
+    --danger:#ff5d7a; --ring:min(540px, 86vw);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{min-height:100%}
+  body{background:var(--bg);color:var(--text);font-family:'Outfit',system-ui,sans-serif;overflow-x:hidden;-webkit-font-smoothing:antialiased}
+  button,input,select{font:inherit;color:inherit}
+  button{cursor:pointer;border:0;background:none}
+
+  /* ---------- animated background ---------- */
+  .bg{position:fixed;inset:0;overflow:hidden;z-index:0;pointer-events:none}
+  .blob{position:absolute;width:60vmax;height:60vmax;border-radius:50%;filter:blur(100px);opacity:.32;transition:background 4s ease}
+  .b1{background:var(--a1);top:-25vmax;left:-20vmax;animation:d1 28s ease-in-out infinite alternate}
+  .b2{background:var(--a2);bottom:-30vmax;right:-20vmax;animation:d2 34s ease-in-out infinite alternate}
+  .b3{background:var(--a1);width:30vmax;height:30vmax;top:40%;left:45%;opacity:.16;animation:d3 22s ease-in-out infinite alternate}
+  @keyframes d1{to{transform:translate(18vmax,12vmax) scale(1.15)}}
+  @keyframes d2{to{transform:translate(-16vmax,-10vmax) scale(1.1)}}
+  @keyframes d3{to{transform:translate(-20vmax,-18vmax) scale(.8)}}
+  .grid{position:absolute;inset:0;background-image:radial-gradient(rgba(255,255,255,.07) 1px,transparent 1px);background-size:28px 28px;mask-image:radial-gradient(ellipse at center,#000 30%,transparent 75%)}
+
+  /* ---------- layout ---------- */
+  .app{position:relative;z-index:1;max-width:1260px;margin:0 auto;display:grid;gap:20px;
+    padding:max(18px,env(safe-area-inset-top)) calc(16px + env(safe-area-inset-right)) calc(40px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left));
+    grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);grid-template-areas:"top top" "clock panel" "clock player";align-items:start}
+  @media (max-width:940px){.app{grid-template-columns:1fr;grid-template-areas:"top" "clock" "panel" "player"}.clock{position:static}}
+  header{grid-area:top;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:600;letter-spacing:.32em;font-size:15px}
+  .logo{width:28px;height:28px;border-radius:50%;background:conic-gradient(from 0deg,var(--a1),var(--a2),var(--a1));box-shadow:0 0 22px var(--a1);animation:spin 8s linear infinite}
+  .logo::after{content:"";display:block;width:14px;height:14px;margin:7px;border-radius:50%;background:var(--bg)}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .hbtns{display:flex;gap:8px;flex-wrap:wrap}
+  .pill{padding:8px 14px;border-radius:999px;background:var(--card);border:1px solid var(--line);font-size:13px;color:var(--muted);transition:.2s}
+  .pill:hover{color:var(--text);border-color:rgba(255,255,255,.25)}
+  .pill.on{color:var(--text);background:linear-gradient(135deg,color-mix(in srgb,var(--a1) 40%,transparent),color-mix(in srgb,var(--a2) 30%,transparent));border-color:transparent}
+
+  /* ---------- clock ---------- */
+  .clock{grid-area:clock;display:flex;flex-direction:column;align-items:center;gap:18px;padding-top:8px;position:sticky;top:18px}
+  .greet{font-size:14px;letter-spacing:.28em;text-transform:uppercase;color:var(--muted)}
+  .dial{position:relative;width:var(--ring);height:var(--ring)}
+  .dial svg{width:100%;height:100%;overflow:visible}
+  .tick{stroke:rgba(255,255,255,.14);stroke-width:2;stroke-linecap:round;transition:stroke .4s}
+  .tick.major{stroke:rgba(255,255,255,.3);stroke-width:3}
+  .tick.lit{stroke:var(--a2)}
+  .track{fill:none;stroke:rgba(255,255,255,.06);stroke-width:3}
+  .prog{fill:none;stroke:url(#grad);stroke-width:4;stroke-linecap:round;filter:drop-shadow(0 0 8px var(--a1))}
+  .hourarc{fill:none;stroke:url(#grad);stroke-width:2;opacity:.35;stroke-linecap:round}
+  .orb{fill:#fff;filter:drop-shadow(0 0 10px var(--a2)) drop-shadow(0 0 4px #fff)}
+  .face{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px}
+  .time{display:flex;align-items:flex-start;line-height:1}
+  .hm{font-size:calc(var(--ring)*.22);font-weight:200;letter-spacing:-.02em;background:linear-gradient(160deg,#fff 20%,var(--a2) 60%,var(--a1));-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 0 28px color-mix(in srgb,var(--a1) 55%,transparent))}
+  .hm .d{display:inline-block;width:.58em;text-align:center}
+  .hm .c{display:inline-block;width:.26em;text-align:center;color:color-mix(in srgb,var(--a2) 70%,#fff);-webkit-text-fill-color:currentColor;animation:blink 1s steps(1) infinite}
+  @keyframes blink{50%{opacity:.35}}
+  .side{display:flex;flex-direction:column;gap:6px;margin-top:calc(var(--ring)*.035);margin-left:6px}
+  .ss{font-size:calc(var(--ring)*.06);font-weight:300;color:var(--a2);font-variant-numeric:tabular-nums}
+  .ap{font-size:calc(var(--ring)*.034);font-weight:500;letter-spacing:.15em;color:var(--muted)}
+  .date{font-size:calc(var(--ring)*.034);color:var(--muted);letter-spacing:.06em}
+  .nextline{display:flex;align-items:center;gap:8px;padding:10px 16px;border-radius:999px;background:var(--card);border:1px solid var(--line);font-size:14px;color:var(--muted);backdrop-filter:blur(14px)}
+  .nextline b{color:var(--text);font-weight:500}
+  .snz{font-size:13px;color:var(--muted);display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+  .snz span{padding:6px 12px;border-radius:999px;background:var(--card2);border:1px dashed var(--line)}
+  .snz button{color:var(--a2);margin-left:6px;font-size:12px}
+
+  /* focus / bedside mode */
+  body.focus .panel, body.focus .player, body.focus header .brand{display:none}
+  body.focus .app{grid-template-columns:1fr;grid-template-areas:"top" "clock"}
+  body.focus{--ring:min(82vh, 92vw)}
+  body.focus .clock{position:static}
+
+  /* ---------- cards ---------- */
+  .card{background:var(--card);border:1px solid var(--line);border-radius:26px;padding:18px;backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px)}
+  .panel{grid-area:panel}
+  .player{grid-area:player}
+  .tabs{position:relative;display:grid;grid-template-columns:repeat(3,1fr);background:rgba(0,0,0,.25);border-radius:14px;padding:4px;margin-bottom:16px}
+  .tabs button{position:relative;z-index:1;padding:10px;border-radius:10px;font-size:14px;color:var(--muted);transition:color .25s}
+  .tabs button.on{color:var(--text)}
+  .tabs .ind{position:absolute;top:4px;bottom:4px;left:4px;width:calc((100% - 8px)/3);border-radius:10px;background:linear-gradient(135deg,color-mix(in srgb,var(--a1) 55%,transparent),color-mix(in srgb,var(--a2) 40%,transparent));transition:transform .35s cubic-bezier(.6,.1,.2,1)}
+  .view{display:none}.view.on{display:block;animation:fade .35s ease}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}}
+
+  /* alarms */
+  .alarms{display:flex;flex-direction:column;gap:10px}
+  .alarm{display:grid;grid-template-columns:auto 1fr auto;gap:14px;align-items:center;padding:12px 14px;border-radius:18px;background:var(--card2);border:1px solid var(--line);cursor:pointer;transition:.25s}
+  .alarm:hover{border-color:rgba(255,255,255,.22);transform:translateY(-1px)}
+  .alarm.off{opacity:.45}
+  .art{width:50px;height:50px;border-radius:14px;background:linear-gradient(135deg,var(--a1),var(--a2));display:grid;place-items:center;font-size:22px;overflow:hidden;flex:none}
+  .art img{width:100%;height:100%;object-fit:cover}
+  .at{font-size:30px;font-weight:300;letter-spacing:-.01em;line-height:1}
+  .at small{font-size:13px;color:var(--muted);margin-left:4px;letter-spacing:.1em}
+  .am{font-size:13px;color:var(--muted);margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .am .sp{color:#1ed760}
+  .aact{display:flex;align-items:center;gap:6px}
+  .ibtn{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;color:var(--muted);transition:.2s}
+  .ibtn:hover{background:rgba(255,255,255,.08);color:var(--text)}
+  .switch{width:50px;height:30px;border-radius:999px;background:rgba(255,255,255,.12);position:relative;transition:.3s;flex:none}
+  .switch::after{content:"";position:absolute;top:3px;left:3px;width:24px;height:24px;border-radius:50%;background:#fff;transition:.3s cubic-bezier(.6,.1,.2,1.3);box-shadow:0 2px 8px rgba(0,0,0,.4)}
+  .switch[aria-checked="true"]{background:linear-gradient(135deg,var(--a1),var(--a2))}
+  .switch[aria-checked="true"]::after{transform:translateX(20px)}
+  .empty{text-align:center;padding:30px 10px;color:var(--muted);font-size:14px;line-height:1.6}
+  .empty .big{font-size:40px;margin-bottom:6px}
+  .add{margin-top:14px;width:100%;padding:14px;border-radius:16px;font-weight:500;font-size:15px;background:linear-gradient(135deg,var(--a1),var(--a2));color:#fff;box-shadow:0 10px 30px -10px var(--a1);transition:.2s}
+  .add:hover{filter:brightness(1.1);transform:translateY(-1px)}
+
+  /* timer + stopwatch */
+  .bigread{font-size:clamp(48px,9vw,76px);font-weight:200;text-align:center;font-variant-numeric:tabular-nums;letter-spacing:-.01em;padding:10px 0 6px}
+  .bar{height:6px;border-radius:99px;background:rgba(255,255,255,.08);overflow:hidden;margin:6px 0 16px}
+  .bar i{display:block;height:100%;width:100%;background:linear-gradient(90deg,var(--a1),var(--a2));border-radius:inherit;transition:width .25s linear}
+  .chips{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-bottom:14px}
+  .chip{padding:8px 14px;border-radius:999px;background:var(--card2);border:1px solid var(--line);font-size:13px;color:var(--muted);transition:.2s}
+  .chip:hover,.chip.on{color:var(--text);border-color:var(--a2)}
+  .row{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+  .btn{padding:12px 22px;border-radius:14px;background:rgba(255,255,255,.08);border:1px solid var(--line);font-weight:500;min-width:100px;transition:.2s}
+  .btn:hover{background:rgba(255,255,255,.14)}
+  .btn.pri{background:linear-gradient(135deg,var(--a1),var(--a2));border-color:transparent;color:#fff}
+  .custom{display:flex;gap:8px;align-items:center;justify-content:center;margin-bottom:14px;color:var(--muted);font-size:13px}
+  .custom input{width:64px;padding:8px;border-radius:10px;border:1px solid var(--line);background:rgba(0,0,0,.25);text-align:center}
+  .laps{margin-top:16px;max-height:220px;overflow:auto;display:flex;flex-direction:column;gap:4px}
+  .lap{display:flex;justify-content:space-between;padding:8px 12px;border-radius:10px;background:var(--card2);font-variant-numeric:tabular-nums;font-size:14px}
+  .lap span:first-child{color:var(--muted)}
+
+  /* spotify player */
+  .phead{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:10px}
+  .phead h3{font-size:15px;font-weight:500;display:flex;align-items:center;gap:8px}
+  .sdot{width:8px;height:8px;border-radius:50%;background:#777}
+  .sdot.ok{background:#1ed760;box-shadow:0 0 10px #1ed760}
+  .phint{font-size:12.5px;color:var(--muted);line-height:1.55}
+  #sp-host{border-radius:14px;overflow:hidden;min-height:0}
+  #sp-host iframe{display:block;border-radius:14px}
+  .tips{margin-top:12px;font-size:12px;color:var(--muted);line-height:1.6}
+
+  /* ---------- editor dialog ---------- */
+  dialog{margin:auto;border:1px solid var(--line);border-radius:26px;background:rgba(18,16,30,.92);color:var(--text);padding:22px;width:min(460px,calc(100vw - 32px));backdrop-filter:blur(30px);box-shadow:0 30px 80px -20px rgba(0,0,0,.8)}
+  dialog::backdrop{background:rgba(3,3,8,.6);backdrop-filter:blur(6px)}
+  dialog[open]{animation:pop .3s cubic-bezier(.3,1.4,.5,1)}
+  @keyframes pop{from{opacity:0;transform:scale(.94)}}
+  dialog h2{font-size:18px;font-weight:500;margin-bottom:16px}
+  .tin{width:100%;font-size:54px;font-weight:200;text-align:center;padding:6px;border-radius:18px;border:1px solid var(--line);background:rgba(0,0,0,.3);color-scheme:dark;margin-bottom:16px}
+  .fl{display:block;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:14px 0 8px}
+  .txt{width:100%;padding:12px 14px;border-radius:14px;border:1px solid var(--line);background:rgba(0,0,0,.3);outline:none;transition:.2s}
+  .txt:focus,.tin:focus{border-color:var(--a2)}
+  .days{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+  .day{aspect-ratio:1;border-radius:50%;background:rgba(255,255,255,.06);border:1px solid var(--line);font-size:13px;color:var(--muted);transition:.2s}
+  .day.on{background:linear-gradient(135deg,var(--a1),var(--a2));color:#fff;border-color:transparent}
+  .spv{font-size:12.5px;margin-top:8px;min-height:18px;color:var(--muted)}
+  .spv.ok{color:#1ed760}.spv.bad{color:var(--danger)}
+  .sprow{display:flex;gap:8px}
+  .sprow .txt{flex:1;min-width:0}
+  .dact{display:flex;gap:10px;margin-top:22px}
+  .dact .btn{flex:1;min-width:0}
+  .del{color:var(--danger);background:rgba(255,93,122,.1);border-color:rgba(255,93,122,.25)}
+  select.txt{appearance:none}
+
+  /* ---------- ringing overlay ---------- */
+  .ringing{position:fixed;inset:0;z-index:60;display:none;align-items:center;justify-content:safe center;flex-direction:column;gap:22px;text-align:center;padding:24px;overflow-x:hidden;overflow-y:auto;
+    padding-top:max(24px,env(safe-area-inset-top));padding-bottom:max(24px,env(safe-area-inset-bottom));
+    background:radial-gradient(circle at 50% 40%,color-mix(in srgb,var(--a1) 45%,#000),#04040a 70%)}
+  .ringing.on{display:flex;animation:fade .4s}
+  .rbg{position:absolute;inset:-60px;background-size:cover;background-position:center;filter:blur(60px) saturate(1.4);opacity:.35;z-index:-1}
+  .pulse{position:relative;width:200px;height:200px;display:grid;place-items:center}
+  .pulse::before,.pulse::after,.pulse i{content:"";position:absolute;inset:0;border-radius:50%;border:2px solid var(--a2);animation:wave 2.4s ease-out infinite}
+  .pulse::after{animation-delay:.8s}.pulse i{animation-delay:1.6s}
+  @keyframes wave{from{transform:scale(.6);opacity:1}to{transform:scale(1.9);opacity:0}}
+  .disc{width:150px;height:150px;border-radius:50%;background:linear-gradient(135deg,var(--a1),var(--a2));display:grid;place-items:center;font-size:56px;overflow:hidden;box-shadow:0 0 60px var(--a1);animation:spin 6s linear infinite}
+  .disc img{width:100%;height:100%;object-fit:cover}
+  .disc.emoji{animation:shake .5s ease-in-out infinite}
+  @keyframes shake{25%{transform:rotate(-12deg)}75%{transform:rotate(12deg)}}
+  .rtime{font-size:clamp(70px,16vw,150px);font-weight:200;line-height:1;letter-spacing:-.02em}
+  .rlabel{font-size:22px;font-weight:400}
+  .rsrc{font-size:13px;color:var(--muted);min-height:18px}
+  .ract{display:flex;gap:14px;flex-wrap:wrap;justify-content:center;margin-top:8px}
+  .rbtn{padding:18px 34px;border-radius:20px;font-size:17px;font-weight:500;min-width:170px}
+  .rsnooze{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2)}
+  .rstop{--p:0;position:relative;overflow:hidden;color:#fff;background:rgba(255,93,122,.25);border:1px solid rgba(255,93,122,.5);touch-action:none;user-select:none}
+  .rstop::before{content:"";position:absolute;inset:0;background:var(--danger);transform-origin:left;transform:scaleX(var(--p))}
+  .rstop span{position:relative}
+  .rkeys{font-size:12px;color:var(--muted)}
+
+  /* ---------- arm overlay + toast ---------- */
+  .arm{position:fixed;inset:0;z-index:80;display:flex;align-items:center;justify-content:center;background:rgba(4,4,10,.72);backdrop-filter:blur(14px);cursor:pointer;padding:24px}
+  .arm.hide{opacity:0;pointer-events:none;transition:opacity .5s}
+  .armbox{text-align:center;max-width:420px}
+  .armbox .logo{width:70px;height:70px;margin:0 auto 22px}
+  .armbox .logo::after{width:36px;height:36px;margin:17px}
+  .armbox h1{font-weight:300;font-size:34px;letter-spacing:.3em;margin-bottom:10px}
+  .armbox p{color:var(--muted);line-height:1.6;font-size:14.5px}
+  .armbox .go{display:inline-block;margin-top:22px;padding:14px 30px;border-radius:999px;background:linear-gradient(135deg,var(--a1),var(--a2));font-weight:500;animation:breathe 2.2s ease-in-out infinite}
+  @keyframes breathe{50%{box-shadow:0 0 40px var(--a1);transform:scale(1.04)}}
+  .toast{position:fixed;left:50%;bottom:24px;transform:translate(-50%,30px);opacity:0;z-index:90;padding:12px 20px;border-radius:14px;background:rgba(20,18,34,.95);border:1px solid var(--line);font-size:14px;transition:.35s;pointer-events:none;max-width:calc(100vw - 32px)}
+  .toast.on{opacity:1;transform:translate(-50%,0)}
+  [hidden]{display:none!important}
+  .iosonly{display:none} body.ios .iosonly{display:block}
+  /* phones: tighter spacing, no hover lift */
+  @media (max-width:520px){.card{padding:14px;border-radius:22px}.alarm:hover{transform:none}.hbtns .pill{padding:7px 11px;font-size:12px}}
+</style>
+</head>
+<body>
+<div class="bg"><div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div><div class="grid"></div></div>
+
+<div class="arm" id="arm">
+  <div class="armbox">
+    <div class="logo"></div>
+    <h1>PULSE</h1>
+    <p>Browsers only allow sound after you tap once.<br>Tap to arm your alarms. Keep Pulse open and they’ll ring right here, with your Spotify song.</p>
+    <p class="iosonly" style="margin-top:12px">📱 On iPhone, alarms ring while Pulse is open on screen. Turn on <b>Keep awake</b>, turn the volume up and leave it on the charger like a bedside clock.</p>
+    <span class="go">Tap to arm</span>
+  </div>
+</div>
+
+<main class="app">
+  <header>
+    <div class="brand"><div class="logo"></div>PULSE</div>
+    <div class="hbtns">
+      <button class="pill on" id="binstall" hidden>⬇ Install app</button>
+      <button class="pill" id="b24">24h</button>
+      <button class="pill" id="bawake" title="Keep the screen from sleeping">☀ Keep awake</button>
+      <button class="pill" id="bfocus" title="Big bedside clock">⛶ Bedside</button>
+    </div>
+  </header>
+
+  <section class="clock">
+    <div class="greet" id="greet">Good evening</div>
+    <div class="dial">
+      <svg viewBox="0 0 400 400" id="svg">
+        <defs>
+          <linearGradient id="grad" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="var(--a1)" id="g1"/><stop offset="1" stop-color="var(--a2)" id="g2"/>
+          </linearGradient>
+        </defs>
+        <g id="ticks"></g>
+        <circle class="track" cx="200" cy="200" r="168"/>
+        <circle class="prog" id="prog" cx="200" cy="200" r="168" transform="rotate(-90 200 200)"/>
+        <circle class="hourarc" id="harc" cx="200" cy="200" r="156" transform="rotate(-90 200 200)"/>
+        <circle class="orb" id="orb" r="5" cx="200" cy="32"/>
+      </svg>
+      <div class="face">
+        <div class="time">
+          <div class="hm" id="hm"></div>
+          <div class="side"><div class="ss" id="ss">00</div><div class="ap" id="ap"></div></div>
+        </div>
+        <div class="date" id="date"></div>
+      </div>
+    </div>
+    <div class="nextline" id="next">No alarms set</div>
+    <div class="snz" id="snz"></div>
+  </section>
+
+  <section class="card panel">
+    <div class="tabs" id="tabs">
+      <div class="ind" id="ind"></div>
+      <button class="on" data-v="0">Alarms</button>
+      <button data-v="1">Timer</button>
+      <button data-v="2">Stopwatch</button>
+    </div>
+
+    <div class="view on" id="v0">
+      <div class="alarms" id="alist"></div>
+      <button class="add" id="addbtn">+ New alarm</button>
+    </div>
+
+    <div class="view" id="v1">
+      <div class="bigread" id="tread">05:00</div>
+      <div class="bar"><i id="tbar"></i></div>
+      <div class="chips" id="tchips">
+        <button class="chip" data-m="1">1 min</button><button class="chip" data-m="3">3 min</button>
+        <button class="chip on" data-m="5">5 min</button><button class="chip" data-m="10">10 min</button>
+        <button class="chip" data-m="25">25 min</button><button class="chip" data-m="60">1 hr</button>
+      </div>
+      <div class="custom">
+        <input type="number" id="tmin" min="0" max="999" value="5" aria-label="minutes"> min
+        <input type="number" id="tsec" min="0" max="59" value="0" aria-label="seconds"> sec
+        <button class="chip" id="tset">Set</button>
+      </div>
+      <div class="row"><button class="btn pri" id="tstart">Start</button><button class="btn" id="treset">Reset</button></div>
+    </div>
+
+    <div class="view" id="v2">
+      <div class="bigread" id="swread">00:00.00</div>
+      <div class="row"><button class="btn pri" id="swstart">Start</button><button class="btn" id="swlap">Lap</button><button class="btn" id="swreset">Reset</button></div>
+      <div class="laps" id="laps"></div>
+    </div>
+  </section>
+
+  <section class="card player">
+    <div class="phead">
+      <h3><span class="sdot" id="sdot"></span>Spotify alarm player</h3>
+      <span class="phint" id="sstat">loading…</span>
+    </div>
+    <div id="sp-host"></div>
+    <p class="phint" id="pempty">Paste a Spotify song, album or playlist link into an alarm and it becomes the alarm sound. It loads here.</p>
+    <div class="tips">Tip: be logged in to Spotify in this browser to hear full songs (otherwise Spotify plays a 30‑second preview on loop). Press <b>Test</b> on an alarm once to check it. If Spotify can’t start, a backup chime rings so you still wake up.</div>
+  </section>
+</main>
+
+<dialog id="ed">
+  <h2 id="edtitle">New alarm</h2>
+  <input type="time" class="tin" id="etime" value="07:00" required>
+  <label class="fl" for="elabel">Label</label>
+  <input class="txt" id="elabel" placeholder="Wake up" maxlength="40">
+  <span class="fl">Repeat</span>
+  <div class="days" id="edays"></div>
+  <label class="fl" for="esp">Spotify sound (optional)</label>
+  <div class="sprow">
+    <input class="txt" id="esp" placeholder="https://open.spotify.com/track/…">
+    <button class="btn" id="eprev" style="min-width:0;padding:12px 14px" title="Preview">▶</button>
+  </div>
+  <div class="spv" id="espv">In Spotify: Share → Copy link, then paste here. Leave empty for the chime.</div>
+  <label class="fl" for="esnooze">Snooze length</label>
+  <select class="txt" id="esnooze">
+    <option value="5">5 minutes</option><option value="9" selected>9 minutes</option>
+    <option value="10">10 minutes</option><option value="15">15 minutes</option><option value="20">20 minutes</option>
+  </select>
+  <div class="dact">
+    <button class="btn del" id="edel">Delete</button>
+    <button class="btn" id="ecancel">Cancel</button>
+    <button class="btn pri" id="esave">Save</button>
+  </div>
+</dialog>
+
+<dialog id="instd">
+  <h2>Add Pulse to your iPhone</h2>
+  <p class="phint" style="font-size:14.5px;line-height:1.7">
+    1. Open this page in <b>Safari</b>.<br>
+    2. Tap the <b>Share</b> button (the square with an arrow ↑).<br>
+    3. Scroll down and tap <b>Add to Home Screen</b>, then <b>Add</b>.<br><br>
+    Pulse then opens full screen from its own icon. To hear full Spotify songs, log in once inside the Spotify player in the app.
+  </p>
+  <div class="dact"><button class="btn pri" id="instok">Got it</button></div>
+</dialog>
+
+<div class="ringing" id="ringing">
+  <div class="rbg" id="rbg"></div>
+  <div class="pulse"><i></i><div class="disc" id="rdisc">⏰</div></div>
+  <div class="rtime" id="rtime">07:00</div>
+  <div class="rlabel" id="rlabel">Alarm</div>
+  <div class="rsrc" id="rsrc"></div>
+  <div class="ract">
+    <button class="rbtn rsnooze" id="rsnooze">💤 Snooze</button>
+    <button class="rbtn rstop" id="rstop"><span>Hold to stop</span></button>
+  </div>
+  <div class="rkeys">Keyboard: S to snooze · Enter to stop</div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+const pad = n => String(n).padStart(2, '0');
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const uid = () => Math.random().toString(36).slice(2, 9);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const store = {
+  get(k, d) { try { const v = localStorage.getItem('pulse.' + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem('pulse.' + k, JSON.stringify(v)); } catch {} }
+};
+
+const state = {
+  alarms: store.get('alarms', []),
+  snoozes: store.get('snoozes', []),
+  h24: store.get('h24', false),
+};
+const save = () => { store.set('alarms', state.alarms); store.set('snoozes', state.snoozes); };
+const dayKey = d => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()} ${d.getHours()}:${d.getMinutes()}`;
+
+function fmtHM(H, M) {
+  if (state.h24) return { t: `${pad(H)}:${pad(M)}`, ap: '' };
+  return { t: `${H % 12 || 12}:${pad(M)}`, ap: H >= 12 ? 'PM' : 'AM' };
+}
+function repeatText(days) {
+  if (!days.length) return 'Once';
+  if (days.length === 7) return 'Every day';
+  const s = [...days].sort().join();
+  if (s === '1,2,3,4,5') return 'Weekdays';
+  if (s === '0,6') return 'Weekends';
+  return [...days].sort().map(d => DAYS[d]).join(' ');
+}
+function toast(msg) {
+  const t = $('#toast'); t.textContent = msg; t.classList.add('on');
+  clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('on'), 2600);
+}
+
+/* ---------------- theme by time of day ---------------- */
+function phase(h) {
+  if (h >= 5 && h < 8)   return ['#ff8a4c', '#ff4f8b', 'Good morning'];
+  if (h >= 8 && h < 12)  return ['#38c6ff', '#7b61ff', 'Good morning'];
+  if (h >= 12 && h < 17) return ['#38c6ff', '#7b61ff', 'Good afternoon'];
+  if (h >= 17 && h < 20) return ['#ff5fa2', '#ffb547', 'Good evening'];
+  return ['#8b5cff', '#22e0c0', h >= 20 ? 'Good evening' : 'Late night'];
+}
+let lastPhase = '';
+function applyTheme(now) {
+  const [a1, a2, greet] = phase(now.getHours());
+  if (a1 + a2 + greet === lastPhase) return;
+  lastPhase = a1 + a2 + greet;
+  document.documentElement.style.setProperty('--a1', a1);
+  document.documentElement.style.setProperty('--a2', a2);
+  $('#g1').setAttribute('stop-color', a1); $('#g2').setAttribute('stop-color', a2);
+  $('#greet').textContent = greet;
+}
+
+/* ---------------- dial ---------------- */
+const R = 168, C = 2 * Math.PI * R, HR = 156, HC = 2 * Math.PI * HR;
+const ticks = [];
+(() => {
+  const g = $('#ticks');
+  for (let i = 0; i < 60; i++) {
+    const a = i / 60 * 2 * Math.PI - Math.PI / 2, major = i % 5 === 0;
+    const r1 = 182, r2 = major ? 196 : 190;
+    const l = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    l.setAttribute('x1', 200 + r1 * Math.cos(a)); l.setAttribute('y1', 200 + r1 * Math.sin(a));
+    l.setAttribute('x2', 200 + r2 * Math.cos(a)); l.setAttribute('y2', 200 + r2 * Math.sin(a));
+    l.setAttribute('class', 'tick' + (major ? ' major' : ''));
+    g.appendChild(l); ticks.push(l);
+  }
+  $('#prog').setAttribute('stroke-dasharray', C);
+  $('#harc').setAttribute('stroke-dasharray', HC);
+})();
+
+let lastSec = -1, lastHM = '';
+function renderClock(now) {
+  const s = now.getSeconds(), frac = (s + now.getMilliseconds() / 1000) / 60;
+  $('#prog').setAttribute('stroke-dashoffset', C * (1 - frac));
+  const a = frac * 2 * Math.PI - Math.PI / 2;
+  $('#orb').setAttribute('cx', 200 + R * Math.cos(a)); $('#orb').setAttribute('cy', 200 + R * Math.sin(a));
+  if (s === lastSec) return;
+  lastSec = s;
+  ticks.forEach((t, i) => t.classList.toggle('lit', i <= s));
+  const minFrac = (now.getMinutes() + s / 60) / 60;
+  $('#harc').setAttribute('stroke-dashoffset', HC * (1 - minFrac));
+  const { t, ap } = fmtHM(now.getHours(), now.getMinutes());
+  if (t + ap !== lastHM) {
+    lastHM = t + ap;
+    $('#hm').innerHTML = [...t].map(c => c === ':' ? '<span class="c">:</span>' : `<span class="d">${c}</span>`).join('');
+    $('#ap').textContent = ap;
+    $('#date').textContent = now.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+    applyTheme(now);
+  }
+  $('#ss').textContent = pad(s);
+  renderNext(now);
+}
+
+/* ---------------- next alarm ---------------- */
+function nextOccurrence(a, from) {
+  const [H, M] = a.time.split(':').map(Number);
+  for (let i = 0; i < 8; i++) {
+    const d = new Date(from); d.setDate(d.getDate() + i); d.setHours(H, M, 0, 0);
+    if (d <= from) continue;
+    if (a.days.length && !a.days.includes(d.getDay())) continue;
+    return d;
+  }
+  return null;
+}
+function renderNext(now) {
+  let best = null;
+  for (const a of state.alarms) if (a.enabled) { const d = nextOccurrence(a, now); if (d && (!best || d < best)) best = d; }
+  for (const s of state.snoozes) { const d = new Date(s.at); if (!best || d < best) best = d; }
+  const el = $('#next');
+  if (!best) { el.innerHTML = '⏰ No alarms on'; return; }
+  const diff = best - now, h = Math.floor(diff / 3600000), m = Math.floor(diff % 3600000 / 60000), sec = Math.floor(diff % 60000 / 1000);
+  const { t, ap } = fmtHM(best.getHours(), best.getMinutes());
+  const when = best.toDateString() === now.toDateString() ? 'Today' : DAYS[best.getDay()];
+  const left = h ? `${h}h ${m}m` : m ? `${m}m ${sec}s` : `${sec}s`;
+  el.innerHTML = `⏰ Next <b>${when} ${t}${ap ? ' ' + ap : ''}</b> · in <b>${left}</b>`;
+}
+
+/* ---------------- alarm list ---------------- */
+function renderAlarms() {
+  const list = $('#alist');
+  const sorted = [...state.alarms].sort((a, b) => a.time.localeCompare(b.time));
+  if (!sorted.length) {
+    list.innerHTML = `<div class="empty"><div class="big">🌙</div>No alarms yet.<br>Add one and pick a Spotify song to wake up to.</div>`;
+  } else {
+    list.innerHTML = sorted.map(a => {
+      const [H, M] = a.time.split(':').map(Number), { t, ap } = fmtHM(H, M);
+      const art = a.spThumb ? `<img src="${esc(a.spThumb)}" alt="">` : (a.spotify ? '🎵' : '🔔');
+      const sound = a.spotify ? `<span class="sp">♫ ${esc(a.spTitle || 'Spotify ' + a.spotify.split(':')[1])}</span>` : 'Chime';
+      return `<div class="alarm ${a.enabled ? '' : 'off'}" data-id="${a.id}">
+        <div class="art">${art}</div>
+        <div style="min-width:0"><div class="at">${t}<small>${ap}</small></div>
+          <div class="am">${esc(a.label || 'Alarm')} · ${repeatText(a.days)} · ${sound}</div></div>
+        <div class="aact">
+          <button class="ibtn" data-act="test" title="Test this alarm">▶</button>
+          <button class="switch" role="switch" aria-label="Enable alarm" aria-checked="${a.enabled}" data-act="toggle"></button>
+        </div></div>`;
+    }).join('');
+  }
+  renderSnoozes();
+  renderPlayerHint();
+}
+$('#alist').addEventListener('click', e => {
+  const card = e.target.closest('.alarm'); if (!card) return;
+  const a = state.alarms.find(x => x.id === card.dataset.id);
+  const act = e.target.closest('[data-act]')?.dataset.act;
+  if (act === 'toggle') {
+    a.enabled = !a.enabled;
+    if (a.enabled) markPastToday(a);
+    save(); renderAlarms(); lastSec = -1;
+    if (a.enabled) { const d = nextOccurrence(a, new Date()); d && toast(`Alarm set for ${DAYS[d.getDay()]} ${fmtHM(d.getHours(), d.getMinutes()).t}`); }
+  } else if (act === 'test') ring({ kind: 'test', alarm: a });
+  else openEditor(a);
+});
+// don't instantly fire an alarm whose time today has already passed
+function markPastToday(a) {
+  const [H, M] = a.time.split(':').map(Number), now = new Date(), d = new Date(now);
+  d.setHours(H, M, 0, 0);
+  a.lastFired = d <= now ? dayKey(d) : null;
+}
+function renderSnoozes() {
+  $('#snz').innerHTML = state.snoozes.map(s => {
+    const d = new Date(s.at), { t, ap } = fmtHM(d.getHours(), d.getMinutes());
+    return `<span>💤 ${esc(s.label || 'Alarm')} snoozed until ${t} ${ap}<button data-s="${s.id}">cancel</button></span>`;
+  }).join('');
+}
+$('#snz').addEventListener('click', e => {
+  const id = e.target.dataset.s; if (!id) return;
+  state.snoozes = state.snoozes.filter(s => s.id !== id); save(); renderSnoozes(); lastSec = -1;
+});
+
+/* ---------------- editor ---------------- */
+let editing = null, edDays = [];
+const ed = $('#ed');
+$('#edays').innerHTML = DAYS.map((d, i) => `<button class="day" data-d="${i}" type="button">${d[0]}</button>`).join('');
+$('#edays').addEventListener('click', e => {
+  const d = e.target.dataset.d; if (d == null) return;
+  const n = +d; edDays = edDays.includes(n) ? edDays.filter(x => x !== n) : [...edDays, n];
+  paintDays();
+});
+const paintDays = () => document.querySelectorAll('.day').forEach(b => b.classList.toggle('on', edDays.includes(+b.dataset.d)));
+
+function parseSpotify(s) {
+  s = (s || '').trim(); if (!s) return null;
+  let m = s.match(/^spotify:(track|album|playlist|episode|show|artist):([A-Za-z0-9]{22})/);
+  if (!m) m = s.match(/open\.spotify\.com\/(?:intl-[a-z-]+\/)?(?:embed\/)?(track|album|playlist|episode|show|artist)\/([A-Za-z0-9]{22})/i);
+  if (!m) return null;
+  const type = m[1].toLowerCase();
+  return { type, id: m[2], uri: `spotify:${type}:${m[2]}`, url: `https://open.spotify.com/${type}/${m[2]}` };
+}
+function validateSp() {
+  const v = $('#esp').value.trim(), el = $('#espv'), p = parseSpotify(v);
+  el.className = 'spv';
+  if (!v) el.textContent = 'In Spotify: Share → Copy link, then paste here. Leave empty for the chime.';
+  else if (p) { el.classList.add('ok'); el.textContent = `✓ Spotify ${p.type} found`; }
+  else { el.classList.add('bad'); el.textContent = v.includes('spotify.link') ? 'Short links don’t work. Open it in Spotify, then copy the open.spotify.com link.' : 'That doesn’t look like a Spotify link.'; }
+  return p;
+}
+$('#esp').addEventListener('input', validateSp);
+$('#eprev').addEventListener('click', async () => {
+  const p = validateSp(); if (!p) return toast('Paste a Spotify link first');
+  try { const c = await ensureController(p.uri); await sleep(700); c.play(); toast('Previewing in the Spotify player'); }
+  catch { toast('Spotify player isn’t loaded (are you offline?)'); }
+});
+
+function openEditor(a) {
+  editing = a || null;
+  $('#edtitle').textContent = a ? 'Edit alarm' : 'New alarm';
+  $('#etime').value = a ? a.time : '07:00';
+  $('#elabel').value = a ? a.label : '';
+  $('#esp').value = a ? (a.spUrl || '') : store.get('lastSp', '');
+  $('#esnooze').value = String(a ? a.snooze : 9);
+  edDays = a ? [...a.days] : [];
+  $('#edel').style.display = a ? '' : 'none';
+  paintDays(); validateSp(); ed.showModal();
+}
+$('#addbtn').addEventListener('click', () => openEditor(null));
+$('#ecancel').addEventListener('click', () => ed.close());
+$('#edel').addEventListener('click', () => {
+  state.alarms = state.alarms.filter(x => x !== editing);
+  state.snoozes = state.snoozes.filter(s => s.alarmId !== editing.id);
+  save(); renderAlarms(); ed.close(); lastSec = -1; toast('Alarm deleted');
+});
+$('#esave').addEventListener('click', async () => {
+  const time = $('#etime').value; if (!time) return toast('Pick a time');
+  const raw = $('#esp').value.trim(), p = parseSpotify(raw);
+  if (raw && !p) return toast('Fix the Spotify link or clear it');
+  const a = editing || { id: uid() };
+  const changedSp = a.spotify !== (p ? p.uri : '');
+  Object.assign(a, { time, label: $('#elabel').value.trim(), days: [...edDays], snooze: +$('#esnooze').value,
+    spotify: p ? p.uri : '', spUrl: p ? p.url : '', enabled: true });
+  if (changedSp) { a.spTitle = ''; a.spThumb = ''; }
+  markPastToday(a);
+  if (!editing) state.alarms.push(a);
+  if (p) store.set('lastSp', p.url);
+  save(); renderAlarms(); ed.close(); lastSec = -1;
+  const d = nextOccurrence(a, new Date());
+  if (d) { const diff = d - new Date(); toast(`Alarm set · rings in ${Math.floor(diff / 3600000)}h ${Math.floor(diff % 3600000 / 60000)}m`); }
+  if (p) {
+    ensureController(p.uri).catch(() => {});
+    if (changedSp) {
+      const meta = await fetchSpMeta(p.url);
+      if (meta) { a.spTitle = meta.title; a.spThumb = meta.thumb; save(); renderAlarms(); }
+    }
+  }
+});
+async function fetchSpMeta(url) {
+  try {
+    const r = await fetch('https://open.spotify.com/oembed?url=' + encodeURIComponent(url));
+    if (!r.ok) return null; const j = await r.json();
+    return { title: j.title || '', thumb: j.thumbnail_url || '' };
+  } catch { return null; }
+}
+
+/* ---------------- Spotify embed ---------------- */
+let SpAPI = null, controller = null, controllerP = null, currentUri = null, spPlaying = false, spLast = null;
+function setSpStatus(ok, txt) { $('#sdot').classList.toggle('ok', ok); $('#sstat').textContent = txt; }
+function renderPlayerHint() { $('#pempty').style.display = controller ? 'none' : ''; }
+window.onSpotifyIframeApiReady = api => {
+  SpAPI = api; setSpStatus(true, 'ready');
+  const first = state.alarms.find(a => a.enabled && a.spotify) || state.alarms.find(a => a.spotify);
+  if (first) ensureController(first.spotify).catch(() => {});
+};
+setTimeout(() => { if (!SpAPI) setSpStatus(false, 'couldn’t load Spotify (offline?) · chime will be used'); }, 12000);
+
+function ensureController(uri) {
+  if (controllerP) return controllerP.then(c => { if (uri && uri !== currentUri) { spPlaying = false; c.loadUri(uri); currentUri = uri; } return c; });
+  if (!SpAPI) return Promise.reject(new Error('no spotify'));
+  controllerP = new Promise(res => {
+    $('#sp-host').innerHTML = '<div id="sp-embed"></div>';
+    SpAPI.createController($('#sp-embed'), { uri, width: '100%', height: 152 }, c => {
+      controller = c; currentUri = uri; renderPlayerHint();
+      c.addListener('playback_update', e => onSpUpdate(e.data));
+      c.addListener('ready', () => res(c));
+      setTimeout(() => res(c), 4000);
+    });
+  });
+  return controllerP;
+}
+function onSpUpdate(d) {
+  spLast = d; spPlaying = !d.isPaused;
+  if (!ringing) return;
+  if (spPlaying) {
+    ringing.spStarted = true;
+    if (toneTimer) stopTone();
+    $('#rsrc').textContent = '♫ Playing on Spotify';
+  } else if (ringing.spStarted && !d.isBuffering) {
+    // keep the alarm going: loop the track / preview if it ends or gets paused
+    clearTimeout(onSpUpdate.t);
+    onSpUpdate.t = setTimeout(() => {
+      if (!ringing || spPlaying || !controller) return;
+      if (d.duration && d.position >= d.duration - 1500) controller.play(); else controller.resume();
+    }, 700);
+  }
+}
+async function startSpotify(uri) {
+  $('#rsrc').textContent = 'Starting Spotify…';
+  const ticket = ringing;
+  setTimeout(() => {
+    if (ringing === ticket && !spPlaying) { startTone(); $('#rsrc').textContent = 'Spotify didn’t start, playing the backup chime'; }
+  }, 8000);
+  try {
+    const c = await ensureController(uri);
+    await sleep(900);
+    for (let i = 0; i < 6 && ringing === ticket && !spPlaying; i++) { try { c.play(); } catch {} await sleep(1300); }
+  } catch {}
+}
+
+/* ---------------- backup chime (Web Audio) ---------------- */
+let actx = null, toneTimer = null, toneGain = null;
+function ensureAudio() {
+  // iPhone: 'playback' lets the chime play even when the silent switch is on
+  try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch {}
+  try { if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)(); if (actx.state === 'suspended') actx.resume(); } catch {}
+}
+function startTone() {
+  ensureAudio(); if (!actx || toneTimer) return;
+  toneGain = actx.createGain(); toneGain.connect(actx.destination);
+  toneGain.gain.setValueAtTime(0.15, actx.currentTime);
+  toneGain.gain.linearRampToValueAtTime(0.9, actx.currentTime + 30); // gets louder over 30s
+  const notes = [659.25, 830.61, 987.77, 1318.51], at = [0, .16, .32, .62];
+  const chime = () => {
+    const t = actx.currentTime;
+    notes.forEach((f, i) => {
+      ['sine', 'triangle'].forEach((type, k) => {
+        const o = actx.createOscillator(), g = actx.createGain();
+        o.type = type; o.frequency.value = f * (k ? 2 : 1);
+        g.gain.setValueAtTime(0, t + at[i]);
+        g.gain.linearRampToValueAtTime(k ? .12 : .5, t + at[i] + .015);
+        g.gain.exponentialRampToValueAtTime(.001, t + at[i] + 1.1);
+        o.connect(g); g.connect(toneGain); o.start(t + at[i]); o.stop(t + at[i] + 1.2);
+      });
+    });
+  };
+  chime(); toneTimer = setInterval(chime, 1700);
+}
+function stopTone() {
+  clearInterval(toneTimer); toneTimer = null;
+  if (toneGain && actx) {
+    const g = toneGain; toneGain = null;
+    try { g.gain.cancelScheduledValues(actx.currentTime); g.gain.setValueAtTime(g.gain.value, actx.currentTime); g.gain.linearRampToValueAtTime(0, actx.currentTime + .15); } catch {}
+    setTimeout(() => g.disconnect(), 300);
+  }
+}
+
+/* ---------------- ringing ---------------- */
+let ringing = null, titleTimer = null;
+const baseTitle = document.title;
+function ring(info) {
+  if (ringing) stopRinging(true);
+  ringing = info;
+  const a = info.alarm, now = new Date(), { t, ap } = fmtHM(now.getHours(), now.getMinutes());
+  $('#rtime').textContent = t + (ap ? ' ' + ap : '');
+  $('#rlabel').textContent = info.kind === 'timer' ? '⏱ Timer done' : (a?.label || 'Alarm') + (info.kind === 'test' ? ' (test)' : '');
+  $('#rsnooze').style.display = a && info.kind !== 'timer' ? '' : 'none';
+  $('#rsnooze').textContent = `💤 Snooze ${a?.snooze || 9} min`;
+  const disc = $('#rdisc');
+  if (a?.spThumb) { disc.className = 'disc'; disc.innerHTML = `<img src="${esc(a.spThumb)}" alt="">`; $('#rbg').style.backgroundImage = `url("${a.spThumb}")`; }
+  else { disc.className = 'disc emoji'; disc.textContent = info.kind === 'timer' ? '⏱' : '⏰'; $('#rbg').style.backgroundImage = ''; }
+  $('#ringing').classList.add('on');
+  $('#rsrc').textContent = '';
+  if (a?.spotify && SpAPI) startSpotify(a.spotify);
+  else { startTone(); $('#rsrc').textContent = a?.spotify ? 'Spotify isn’t loaded, playing the chime' : ''; }
+  navigator.vibrate?.([400, 200, 400, 200, 400]);
+  let f = false; clearInterval(titleTimer);
+  titleTimer = setInterval(() => { document.title = (f = !f) ? '⏰ WAKE UP' : baseTitle; }, 800);
+  if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
+    const title = '⏰ ' + $('#rlabel').textContent, opts = { body: $('#rtime').textContent, requireInteraction: true, icon: 'icons/icon-192.png', tag: 'pulse-alarm' };
+    // installed apps show notifications through the service worker
+    (swReg ? swReg.showNotification(title, opts) : Promise.reject()).catch(() => {
+      try { const n = new Notification(title, opts); n.onclick = () => { window.focus(); n.close(); }; } catch {}
+    });
+  }
+}
+function stopRinging(silent) {
+  if (!ringing) return;
+  ringing = null; stopTone();
+  if (controller && spPlaying) { try { controller.pause(); } catch {} }
+  $('#ringing').classList.remove('on');
+  clearInterval(titleTimer); document.title = baseTitle;
+  if (!silent) toast('Alarm stopped. Have a great day ✨');
+}
+function snooze() {
+  const a = ringing?.alarm; if (!a) return;
+  const mins = a.snooze || 9;
+  state.snoozes.push({ id: uid(), alarmId: a.id, label: a.label, at: Date.now() + mins * 60000 });
+  save(); stopRinging(true); renderSnoozes(); lastSec = -1; toast(`💤 Snoozed for ${mins} minutes`);
+}
+$('#rsnooze').addEventListener('click', snooze);
+const stopBtn = $('#rstop'); let holdRaf = 0;
+stopBtn.addEventListener('pointerdown', e => {
+  e.preventDefault(); const t0 = performance.now();
+  const step = () => {
+    const p = Math.min(1, (performance.now() - t0) / 700);
+    stopBtn.style.setProperty('--p', p);
+    if (p >= 1) { stopBtn.style.setProperty('--p', 0); stopRinging(); return; }
+    holdRaf = requestAnimationFrame(step);
+  };
+  step();
+});
+['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => stopBtn.addEventListener(ev, () => { cancelAnimationFrame(holdRaf); stopBtn.style.setProperty('--p', 0); }));
+document.addEventListener('keydown', e => {
+  if (!ringing) return;
+  if (e.key === 's' || e.key === 'S') snooze();
+  if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); stopRinging(); }
+});
+
+/* ---------------- alarm checking ---------------- */
+function checkAlarms(now) {
+  if (ringing) return;
+  for (const a of state.alarms) {
+    if (!a.enabled) continue;
+    const [H, M] = a.time.split(':').map(Number), sched = new Date(now);
+    sched.setHours(H, M, 0, 0);
+    const diff = now - sched;
+    if (diff < 0 || diff > 180000) continue;            // ring within 3 min of the set time (covers throttled tabs)
+    if (a.days.length && !a.days.includes(sched.getDay())) continue;
+    const key = dayKey(sched);
+    if (a.lastFired === key) continue;
+    a.lastFired = key;
+    if (!a.days.length) a.enabled = false;              // one-time alarm turns itself off
+    save(); renderAlarms(); lastSec = -1;
+    return ring({ kind: 'alarm', alarm: a });
+  }
+  const due = state.snoozes.find(s => now >= s.at);
+  if (due) {
+    state.snoozes = state.snoozes.filter(s => s !== due); save(); renderSnoozes(); lastSec = -1;
+    const a = state.alarms.find(x => x.id === due.alarmId) || { id: due.alarmId, label: due.label, snooze: 9 };
+    ring({ kind: 'alarm', alarm: a });
+  }
+}
+
+/* ---------------- timer ---------------- */
+const timer = { total: 300000, remaining: 300000, endAt: 0, running: false };
+const fmtDur = ms => {
+  const s = Math.ceil(ms / 1000), h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), ss = s % 60;
+  return h ? `${h}:${pad(m)}:${pad(ss)}` : `${pad(m)}:${pad(ss)}`;
+};
+function renderTimer() {
+  $('#tread').textContent = fmtDur(Math.max(0, timer.remaining));
+  $('#tbar').style.width = (timer.total ? Math.max(0, timer.remaining) / timer.total * 100 : 0) + '%';
+  $('#tstart').textContent = timer.running ? 'Pause' : (timer.remaining < timer.total ? 'Resume' : 'Start');
+}
+function setTimer(ms) {
+  if (ms <= 0) return;
+  Object.assign(timer, { total: ms, remaining: ms, running: false });
+  $('#tmin').value = Math.floor(ms / 60000); $('#tsec').value = Math.floor(ms % 60000 / 1000);
+  renderTimer();
+}
+$('#tchips').addEventListener('click', e => {
+  const m = e.target.dataset.m; if (!m) return;
+  document.querySelectorAll('#tchips .chip').forEach(c => c.classList.toggle('on', c === e.target));
+  setTimer(+m * 60000);
+});
+$('#tset').addEventListener('click', () => { document.querySelectorAll('#tchips .chip').forEach(c => c.classList.remove('on')); setTimer((+$('#tmin').value || 0) * 60000 + (+$('#tsec').value || 0) * 1000); });
+$('#tstart').addEventListener('click', () => {
+  ensureAudio();
+  if (timer.running) { timer.remaining = timer.endAt - Date.now(); timer.running = false; }
+  else { if (timer.remaining <= 0) timer.remaining = timer.total; timer.endAt = Date.now() + timer.remaining; timer.running = true; }
+  renderTimer();
+});
+$('#treset').addEventListener('click', () => { timer.running = false; timer.remaining = timer.total; renderTimer(); });
+function tickTimer(now) {
+  if (!timer.running) return;
+  timer.remaining = timer.endAt - now;
+  if (timer.remaining <= 0) { timer.running = false; timer.remaining = timer.total; ring({ kind: 'timer' }); }
+  renderTimer();
+}
+
+/* ---------------- stopwatch ---------------- */
+const sw = { start: 0, acc: 0, running: false, laps: [] };
+const swElapsed = () => sw.acc + (sw.running ? performance.now() - sw.start : 0);
+const fmtSw = ms => { const cs = Math.floor(ms / 10) % 100, s = Math.floor(ms / 1000), m = Math.floor(s / 60);
+  return (m >= 60 ? Math.floor(m / 60) + ':' + pad(m % 60) : pad(m)) + ':' + pad(s % 60) + '.' + pad(cs); };
+function renderLaps() {
+  $('#laps').innerHTML = sw.laps.map((l, i) => `<div class="lap"><span>Lap ${sw.laps.length - i}</span><span>+${fmtSw(l.split)}</span><span>${fmtSw(l.total)}</span></div>`).join('');
+}
+$('#swstart').addEventListener('click', () => {
+  if (sw.running) { sw.acc += performance.now() - sw.start; sw.running = false; }
+  else { sw.start = performance.now(); sw.running = true; }
+  $('#swstart').textContent = sw.running ? 'Stop' : 'Start';
+});
+$('#swlap').addEventListener('click', () => {
+  if (!sw.running) return;
+  const total = swElapsed(), prev = sw.laps[0]?.total || 0;
+  sw.laps.unshift({ total, split: total - prev }); renderLaps();
+});
+$('#swreset').addEventListener('click', () => { Object.assign(sw, { acc: 0, running: false, laps: [] }); $('#swstart').textContent = 'Start'; $('#swread').textContent = fmtSw(0); renderLaps(); });
+
+/* ---------------- tabs + header ---------------- */
+$('#tabs').addEventListener('click', e => {
+  const v = e.target.dataset.v; if (v == null) return;
+  document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b === e.target));
+  document.querySelectorAll('.view').forEach((el, i) => el.classList.toggle('on', i === +v));
+  $('#ind').style.transform = `translateX(${v * 100}%)`;
+});
+function paint24() { $('#b24').classList.toggle('on', state.h24); lastHM = ''; lastSec = -1; renderAlarms(); }
+$('#b24').addEventListener('click', () => { state.h24 = !state.h24; store.set('h24', state.h24); paint24(); });
+
+let wakeLock = null, wantAwake = false;
+async function grabWake() { try { wakeLock = await navigator.wakeLock.request('screen'); } catch { wakeLock = null; } }
+$('#bawake').addEventListener('click', async () => {
+  wantAwake = !wantAwake;
+  if (wantAwake) { await grabWake(); if (!wakeLock) { wantAwake = false; return toast('This browser can’t keep the screen awake here'); } toast('Screen will stay on'); }
+  else { try { await wakeLock?.release(); } catch {} wakeLock = null; }
+  $('#bawake').classList.toggle('on', wantAwake);
+});
+document.addEventListener('visibilitychange', () => { if (wantAwake && !document.hidden) grabWake(); });
+
+$('#bfocus').addEventListener('click', () => {
+  const on = !document.body.classList.contains('focus');
+  document.body.classList.toggle('focus', on); $('#bfocus').classList.toggle('on', on);
+  lastHM = ''; lastSec = -1;
+  try { on ? document.documentElement.requestFullscreen?.() : document.fullscreenElement && document.exitFullscreen(); } catch {}
+});
+document.addEventListener('fullscreenchange', () => {
+  if (!document.fullscreenElement) { document.body.classList.remove('focus'); $('#bfocus').classList.remove('on'); }
+});
+
+/* ---------------- arm (unlock audio) ---------------- */
+$('#arm').addEventListener('click', () => {
+  ensureAudio();
+  try { if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission(); } catch {}
+  $('#arm').classList.add('hide');
+});
+
+/* ---------------- installable app ---------------- */
+const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const isStandalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+document.body.classList.toggle('ios', isIOS);
+let swReg = null, installPrompt = null;
+if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+  navigator.serviceWorker.register('sw.js').then(r => { swReg = r; }).catch(() => {});
+}
+// desktop Chrome / Edge / Android: real install prompt
+addEventListener('beforeinstallprompt', e => { e.preventDefault(); installPrompt = e; $('#binstall').hidden = false; });
+addEventListener('appinstalled', () => { $('#binstall').hidden = true; toast('Pulse installed 🎉'); });
+// iPhone: no prompt exists, so show the Add to Home Screen steps
+if (isIOS && !isStandalone) $('#binstall').hidden = false;
+$('#binstall').addEventListener('click', async () => {
+  if (installPrompt) { installPrompt.prompt(); await installPrompt.userChoice; installPrompt = null; $('#binstall').hidden = true; }
+  else $('#instd').showModal();
+});
+$('#instok').addEventListener('click', () => $('#instd').close());
+
+/* ---------------- loops ---------------- */
+function tick() { const now = new Date(); checkAlarms(now); tickTimer(Date.now()); if (document.hidden) renderClock(now); }
+// a worker keeps ticking reliably even when the tab is in the background
+try {
+  const w = new Worker(URL.createObjectURL(new Blob(['setInterval(()=>postMessage(0),500)'], { type: 'text/javascript' })));
+  w.onmessage = tick;
+} catch { setInterval(tick, 500); }
+(function frame() {
+  renderClock(new Date());
+  if (sw.running) $('#swread').textContent = fmtSw(swElapsed());
+  requestAnimationFrame(frame);
+})();
+
+paint24(); renderTimer();
+</script>
+<script src="https://open.spotify.com/embed/iframe-api/v1" async></script>
+</body>
+</html>
